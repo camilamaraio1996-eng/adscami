@@ -200,3 +200,84 @@ export interface ConnectionTestResult {
   account?: AdAccount;
   error?: string;
 }
+
+export interface Alert {
+  id: string;
+  campaignId?: string;
+  campaignName?: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  category: 'performance' | 'creative' | 'audience' | 'pixel' | 'budget' | 'funnel';
+  title: string;
+  message: string;
+  metric?: string;
+  value?: string;
+  threshold?: string;
+  action: string;
+  timestamp: string;
+}
+
+export interface AIInsight {
+  id: string;
+  type: 'positive' | 'negative' | 'opportunity' | 'warning' | 'prediction';
+  title: string;
+  detail: string;
+  impact: 'high' | 'medium' | 'low';
+  action?: string;
+  metric?: string;
+  value?: string;
+  emoji: string;
+}
+
+export interface FunnelStep {
+  label: string;
+  value: number;
+  percentage: number;
+  dropoff: number;
+  color: string;
+  icon: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  description: string;
+  condition: string;
+  action: string;
+  enabled: boolean;
+  priority: 'high' | 'medium' | 'low';
+  category: 'budget' | 'creative' | 'audience' | 'bid' | 'scale';
+  triggeredCount: number;
+  lastTriggered?: string;
+}
+
+export interface KPIConfig {
+  targetCTR: number;
+  targetCPC: number;
+  targetCPM: number;
+  targetCPA: number;
+  targetROAS: number;
+  targetFrequency: number;
+  currency: string;
+  industry: string;
+}
+
+export interface PortfolioAnalysis {
+  totalSpend: number;
+  totalImpressions: number;
+  totalClicks: number;
+  totalConversions: number;
+  avgCTR: number;
+  avgCPC: number;
+  avgCPM: number;
+  avgROAS: number | null;
+  avgFrequency: number;
+  healthScore: number;
+  healthLabel: string;
+  alerts: Alert[];
+  insights: AIInsight[];
+  topCampaign: string;
+  worstCampaign: string;
+  totalCampaigns: number;
+  activeCampaigns: number;
+  riskLevel: 'critical' | 'high' | 'medium' | 'low';
+}

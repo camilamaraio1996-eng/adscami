@@ -1,5 +1,8 @@
+'use client';
+
 import { LucideIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TooltipInfo } from '@/components/ui/tooltip-info';
 import { cn } from '@/lib/utils';
 
 interface MetricCardProps {
@@ -11,24 +14,66 @@ interface MetricCardProps {
   trendValue?: string;
   loading?: boolean;
   color?: 'blue' | 'green' | 'violet' | 'orange' | 'rose' | 'default';
+  tooltip?: string;
 }
 
 const colorMap = {
-  blue: 'from-blue-500/20 to-blue-600/5 border-blue-500/20',
-  green: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/20',
-  violet: 'from-violet-500/20 to-violet-600/5 border-violet-500/20',
-  orange: 'from-orange-500/20 to-orange-600/5 border-orange-500/20',
-  rose: 'from-rose-500/20 to-rose-600/5 border-rose-500/20',
-  default: 'from-white/[0.04] to-transparent border-white/[0.06]',
+  blue: {
+    card: 'border-blue-500/20 hover:border-blue-500/40 hover:glow-blue',
+    accent: 'bg-blue-500/10',
+    icon: 'text-blue-400',
+    value: 'text-blue-100',
+    bar: 'bg-blue-500/40',
+  },
+  green: {
+    card: 'border-emerald-500/20 hover:border-emerald-500/40',
+    accent: 'bg-emerald-500/10',
+    icon: 'text-emerald-400',
+    value: 'text-emerald-100',
+    bar: 'bg-emerald-500/40',
+  },
+  violet: {
+    card: 'border-violet-500/20 hover:border-violet-500/40',
+    accent: 'bg-violet-500/10',
+    icon: 'text-violet-400',
+    value: 'text-violet-100',
+    bar: 'bg-violet-500/40',
+  },
+  orange: {
+    card: 'border-orange-500/20 hover:border-orange-500/40',
+    accent: 'bg-orange-500/10',
+    icon: 'text-orange-400',
+    value: 'text-orange-100',
+    bar: 'bg-orange-500/40',
+  },
+  rose: {
+    card: 'border-rose-500/20 hover:border-rose-500/40',
+    accent: 'bg-rose-500/10',
+    icon: 'text-rose-400',
+    value: 'text-rose-100',
+    bar: 'bg-rose-500/40',
+  },
+  default: {
+    card: 'border-white/[0.06] hover:border-white/[0.12]',
+    accent: 'bg-white/[0.04]',
+    icon: 'text-white/40',
+    value: 'text-white',
+    bar: 'bg-white/10',
+  },
 };
 
-const iconColorMap = {
-  blue: 'text-blue-400',
-  green: 'text-emerald-400',
-  violet: 'text-violet-400',
-  orange: 'text-orange-400',
-  rose: 'text-rose-400',
-  default: 'text-white/40',
+const DEFAULT_TOOLTIPS: Record<string, string> = {
+  'Gasto total': 'Total invertido en el período seleccionado.',
+  Impresiones: 'Veces que tu anuncio fue mostrado.',
+  Alcance: 'Personas únicas que vieron tu anuncio.',
+  Clics: 'Total de clics en tus anuncios.',
+  CTR: 'Click-Through Rate: % de impresiones que generaron un clic. Benchmark: 0.9–1.5%.',
+  CPC: 'Costo Por Clic: cuánto pagás por cada clic. Menos es mejor.',
+  CPM: 'Costo Por Mil impresiones: cuánto costó llegar a 1.000 personas.',
+  Frecuencia: 'Promedio de veces que una persona vio tu anuncio. >3 indica saturación.',
+  ROAS: 'Return On Ad Spend: ingresos por cada $1 invertido. >3x es excelente.',
+  Leads: 'Clientes potenciales generados.',
+  Compras: 'Compras registradas vía píxel.',
 };
 
 export function MetricCard({
@@ -40,7 +85,11 @@ export function MetricCard({
   trendValue,
   loading,
   color = 'default',
+  tooltip,
 }: MetricCardProps) {
+  const styles = colorMap[color];
+  const resolvedTooltip = tooltip ?? DEFAULT_TOOLTIPS[label];
+
   if (loading) {
     return (
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
@@ -54,21 +103,31 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'rounded-xl border bg-gradient-to-br p-4 transition-all duration-200 hover:border-white/[0.10] group',
-        colorMap[color]
+        'rounded-xl border bg-white/[0.02] p-4 transition-all duration-200 group animate-slide-up',
+        styles.card
       )}
     >
+      {/* Top row */}
       <div className="flex items-start justify-between mb-3">
-        <p className="text-xs text-white/40 font-medium">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs text-white/40 font-medium">{label}</p>
+          {resolvedTooltip && <TooltipInfo content={resolvedTooltip} />}
+        </div>
         {Icon && (
-          <div className="w-7 h-7 rounded-lg bg-white/[0.04] flex items-center justify-center">
-            <Icon className={cn('w-3.5 h-3.5', iconColorMap[color])} />
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center', styles.accent)}>
+            <Icon className={cn('w-3.5 h-3.5', styles.icon)} />
           </div>
         )}
       </div>
-      <p className="text-xl font-semibold text-white tracking-tight">{value}</p>
+
+      {/* Value */}
+      <p className={cn('text-xl font-semibold tracking-tight animate-count-up', styles.value)}>
+        {value}
+      </p>
+
+      {/* Sub row */}
       {(subValue || trendValue) && (
-        <div className="mt-1 flex items-center gap-1.5">
+        <div className="mt-1.5 flex items-center gap-1.5">
           {trendValue && (
             <span
               className={cn(
