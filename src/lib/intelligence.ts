@@ -761,112 +761,228 @@ export function getSmartRecommendations(campaigns: CampaignWithInsights[]): stri
 
 // ─── Chat Response ─────────────────────────────────────────────────────────────
 
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+}
+
 export function generateChatResponse(
   question: string,
   analysis: PortfolioAnalysis,
   campaigns: CampaignWithInsights[]
 ): string {
-  const q = question.toLowerCase();
+  const q = normalize(question);
+  const noData = campaigns.filter((c) => c.insights).length === 0;
 
-  // Escalar
-  if (q.includes('escalar') || q.includes('scale') || q.includes('aumentar presupuesto')) {
+  if (noData) {
+    return `Todavía no tengo datos de tus campañas. Conectá tu cuenta en Configuración con un Access Token válido y volvé a preguntar — voy a analizar tus métricas reales.`;
+  }
+
+  // ── Escalar ────────────────────────────────────────────────────────────────
+  if (q.includes('escalar') || q.includes('scale') || q.includes('aumentar presupuesto') || q.includes('subir presupuesto')) {
     const best = campaigns
       .filter((c) => c.insights)
       .sort((a, b) => {
-        const rA = getRoas(a.insights!.purchase_roas) || 0;
-        const rB = getRoas(b.insights!.purchase_roas) || 0;
+        const rA = getRoas(a.insights!.purchase_roas) || parseFloat(a.insights!.ctr || '0') / 10;
+        const rB = getRoas(b.insights!.purchase_roas) || parseFloat(b.insights!.ctr || '0') / 10;
         return rB - rA;
       })[0];
     if (best) {
       const roas = getRoas(best.insights!.purchase_roas);
+      const ctr = parseFloat(best.insights!.ctr || '0');
       if (roas && roas >= 2) {
-        return `La campaña que más conviene escalar es "${best.name}"${roas ? ` (ROAS ${roas.toFixed(1)}x)` : ''}. Recomiendo aumentar el presupuesto un 20% por día y monitorear las primeras 48 horas. Si el ROAS se mantiene, seguís escalando. No aumentes más del 20% diario o el algoritmo se desestabiliza.`;
+        return `La campaña para escalar es "${best.name}" con ROAS ${roas.toFixed(1)}x. Aumentá el presupuesto un 20% por día (no más) durante 3-5 días y revisá cada 48h. Si el ROAS se mantiene por encima de 2x, seguís subiendo. Si baja más del 15%, pausá el escalado y dejá que el algoritmo se re-optimice.`;
+      }
+      if (ctr >= 1.5) {
+        return `"${best.name}" tiene el mejor CTR (${ctr.toFixed(2)}%) pero sin ROAS comprobado todavía. Antes de escalar, asegurate de que el píxel mida conversiones. Con CTR bueno y píxel funcionando, en 7 días tendrás datos suficientes para escalar con confianza.`;
       }
     }
-    return `Con el portfolio actual (salud ${analysis.healthScore}/100), necesitás al menos 7 días de datos con ROAS > 2x antes de escalar. Primero asegurate de que las campañas estén convirtiendo de manera consistente.`;
+    return `Ninguna campaña tiene ROAS > 2x todavía (salud del portfolio: ${analysis.healthScore}/100). Enfocate primero en validar conversiones con la campaña "${analysis.topCampaign}". Una vez que tenga ROAS consistente > 2x durante 7 días, estará lista para escalar.`;
   }
 
-  // Ventas / conversiones
+  // ── Ventas / sin conversiones ──────────────────────────────────────────────
   if (
     q.includes('venta') ||
-    q.includes('conversiones') ||
+    q.includes('conversion') ||
     q.includes('compra') ||
-    q.includes('purchase')
+    q.includes('purchase') ||
+    q.includes('no tengo venta') ||
+    q.includes('sin venta')
   ) {
-    if (analysis.totalConversions === 0) {
-      return `No hay conversiones registradas. Los principales sospechosos son: 1) El píxel de Meta no está disparando el evento Purchase — verificalo con Meta Pixel Helper. 2) La landing page genera fricción — revisá que cargue en menos de 3 segundos en mobile. 3) La oferta no es convincente — revisá precio, beneficios y urgencia. 4) El público objetivo puede no ser el correcto.`;
+    if (analysis.totalConversions === 0 && analysis.totalSpend > 0) {
+      const highCTR = campaigns.find(
+        (c) => c.insights && parseFloat(c.insights.ctr || '0') > 1
+      );
+      if (highCTR) {
+        return `Tenés clics (CTR de "${highCTR.name}" es ${parseFloat(highCTR.insights!.ctr || '0').toFixed(2)}%) pero 0 conversiones. El problema está después del clic: 1) Verificá el píxel con "Meta Pixel Helper" en Chrome. 2) Testea el proceso de compra vos mismo en mobile. 3) Revisá que el evento Purchase esté disparando. 4) Controlá la velocidad de la landing (debe cargar en <3s).`;
+      }
+      return `0 conversiones con $${analysis.totalSpend.toFixed(0)} gastados. Causas más probables: 1) Píxel de Meta no configurado o disparando el evento equivocado. 2) Landing page con problemas en mobile (85% del tráfico de Meta es mobile). 3) Proceso de pago con fricción. 4) Oferta no suficientemente atractiva. Empezá verificando el píxel.`;
     }
-    const cpa = analysis.totalConversions > 0 ? analysis.totalSpend / analysis.totalConversions : 0;
-    return `Tenés ${analysis.totalConversions} conversiones totales con un CPA promedio de $${cpa.toFixed(0)}. Para aumentar conversiones: optimizá la landing para mobile, simplificá el formulario de compra y activá retargeting para carrito abandonado.`;
+    if (analysis.totalConversions > 0) {
+      const cpa = analysis.totalSpend / analysis.totalConversions;
+      const trend = analysis.avgROAS !== null && analysis.avgROAS >= 2 ? 'rentable' : 'mejorable';
+      return `Tenés ${analysis.totalConversions} conversiones con CPA de $${cpa.toFixed(0)} — situación ${trend}. Para aumentar volumen: activá retargeting de carrito abandonado (suele tener 3-5x mejor conversión), creá una campaña de Lookalike audience basada en compradores existentes, y optimizá la landing para reducir fricción.`;
+    }
+    return `No hay datos de conversiones disponibles. Configurá el evento de conversión (Purchase o Lead) en el Administrador de eventos de Meta para que el píxel lo registre correctamente.`;
   }
 
-  // Problema principal
+  // ── Problema / mal / peor ──────────────────────────────────────────────────
   if (
     q.includes('problema') ||
     q.includes('issue') ||
-    q.includes('error') ||
-    q.includes('mal')
+    q.includes('mal') ||
+    q.includes('peor') ||
+    q.includes('mayor problema') ||
+    q.includes('que falla') ||
+    q.includes('que fallo')
   ) {
-    const criticalAlerts = analysis.alerts.filter(
-      (a) => a.priority === 'critical' || a.priority === 'high'
-    );
+    const criticals = analysis.alerts.filter((a) => a.priority === 'critical');
+    const highs = analysis.alerts.filter((a) => a.priority === 'high');
+    if (criticals.length > 0) {
+      const top = criticals[0];
+      return `Tu problema más urgente: ${top.title} — ${top.message} → ${top.action}. También tenés ${highs.length} alerta(s) de prioridad alta. Con un score de salud ${analysis.healthScore}/100, necesitás resolver esto antes de cualquier otra optimización.`;
+    }
+    if (highs.length > 0) {
+      const top = highs[0];
+      return `No hay alertas críticas, pero sí tenés ${highs.length} problema(s) de alta prioridad. El principal: ${top.title} — ${top.message} Acción: ${top.action}.`;
+    }
+    return `No hay problemas críticos en este momento (score ${analysis.healthScore}/100 — ${analysis.healthLabel}). La principal área de mejora es: ${analysis.avgCTR < 1 ? `CTR bajo (${analysis.avgCTR.toFixed(2)}% — benchmark 1%)` : analysis.avgFrequency > 3 ? `frecuencia alta (${analysis.avgFrequency.toFixed(1)}x — máximo recomendado 3x)` : analysis.avgROAS !== null && analysis.avgROAS < 2 ? `ROAS (${analysis.avgROAS.toFixed(1)}x — objetivo 2x+)` : 'el portfolio está bien, mantené el ritmo actual'}.`;
+  }
+
+  // ── Qué métrica mejorar primero ────────────────────────────────────────────
+  if (
+    q.includes('metrica') ||
+    q.includes('mejorar primero') ||
+    q.includes('que mejorar') ||
+    q.includes('por donde empezar') ||
+    q.includes('prioridad') ||
+    q.includes('primero') ||
+    q.includes('foco') ||
+    q.includes('enfoque')
+  ) {
+    // Priority logic: determine the most impactful metric to fix
+    const criticalAlerts = analysis.alerts.filter((a) => a.priority === 'critical');
+    const noConversions = analysis.totalConversions === 0 && analysis.totalSpend > 100;
+    const poorROAS = analysis.avgROAS !== null && analysis.avgROAS < 1;
+    const poorCTR = analysis.avgCTR < 0.5 && analysis.avgCTR > 0;
+    const highFreq = analysis.avgFrequency > 4;
+
+    if (noConversions) {
+      return `Prioridad #1: el píxel de conversión. Gastás dinero pero no registrás resultados — eso significa que o el píxel no está instalado, o el evento (Purchase/Lead) no está configurado. Sin esto, todo lo demás es ciego. Instalá "Meta Pixel Helper" y verificá que dispare al completar una compra.`;
+    }
+    if (poorROAS) {
+      return `Prioridad #1: ROAS (actualmente ${analysis.avgROAS!.toFixed(2)}x — estás perdiendo dinero). Antes de optimizar CTR o frecuencia, solucioná la rentabilidad. Pausá campañas con ROAS < 1, revisá la propuesta de valor y el precio, y testea nuevas audiencias más calificadas.`;
+    }
     if (criticalAlerts.length > 0) {
       const top = criticalAlerts[0];
-      return `Tu mayor problema es: "${top.title}" — ${top.message} Acción recomendada: ${top.action}. Tenés ${criticalAlerts.length} alertas prioritarias en total que requieren atención.`;
+      return `Prioridad #1: resolver "${top.title}" — es lo que más frena tu portfolio ahora mismo. ${top.action}. Una vez resuelto, las otras métricas deberían mejorar en cascada.`;
     }
-    return `Tu portfolio está en buen estado (${analysis.healthScore}/100). No hay alertas críticas. La principal área de mejora es ${analysis.avgCTR < 1 ? `el CTR promedio (${analysis.avgCTR.toFixed(2)}%)` : analysis.avgFrequency > 3 ? `la frecuencia elevada (${analysis.avgFrequency.toFixed(1)}x)` : 'mantener el rendimiento actual'}.`;
+    if (poorCTR) {
+      return `Prioridad #1: CTR (${analysis.avgCTR.toFixed(2)}% — muy por debajo del 0.9% de benchmark). El CTR bajo encarece todo: aumenta el CPC, el CPM y reduce la eficiencia del gasto. Cambiá los creativos primero — es el cambio con mayor impacto inmediato.`;
+    }
+    if (highFreq) {
+      return `Prioridad #1: frecuencia (${analysis.avgFrequency.toFixed(1)}x — la audiencia está saturada). Cuando la frecuencia supera 3-4x, el CTR cae y el CPC sube. Rotá creatividades urgente o ampliá las audiencias antes de que el rendimiento se deteriore más.`;
+    }
+    if (analysis.avgCTR < 1) {
+      return `Tu métrica más impactante a mejorar es el CTR (${analysis.avgCTR.toFixed(2)}%). Con mejor CTR obtenés más clics al mismo costo, el CPM efectivo baja y el algoritmo te premia con más distribución. Testá 3-4 creatividades nuevas esta semana con diferentes hooks (primeros 3 segundos distintos).`;
+    }
+    return `Tu portfolio está en zona saludable (${analysis.healthScore}/100). La métrica a optimizar ahora es ${analysis.avgROAS !== null ? `mejorar el ROAS de ${analysis.avgROAS.toFixed(1)}x a 3x+` : `escalar el volumen manteniendo el CTR de ${analysis.avgCTR.toFixed(2)}%`}. Hacelo aumentando el presupuesto de la campaña "${analysis.topCampaign}" gradualmente.`;
   }
 
-  // CTR
-  if (q.includes('ctr') || q.includes('clics') || q.includes('click')) {
-    return `Tu CTR promedio es ${analysis.avgCTR.toFixed(2)}%. El benchmark de la industria de Meta Ads es 0.9-1.5%. ${analysis.avgCTR < 0.9 ? 'Estás por debajo del promedio. Para mejorar el CTR: 1) Probá creatividades en video (vs imagen estática). 2) Usá caras humanas en las imágenes. 3) Agregá texto en el anuncio con propuesta de valor clara. 4) Cambiá el copy del CTA.' : 'Estás en buena zona. Para mantenerlo, rotá creatividades cada 2-3 semanas antes de que baje la frecuencia.'}`;
+  // ── CTR ───────────────────────────────────────────────────────────────────
+  if (q.includes('ctr') || q.includes('clic') || q.includes('click') || q.includes('tasa de clics')) {
+    const ctrStatus = analysis.avgCTR >= 2 ? 'excelente' : analysis.avgCTR >= 1 ? 'bueno' : analysis.avgCTR >= 0.5 ? 'bajo' : 'muy bajo';
+    const actionText = analysis.avgCTR < 1
+      ? 'Para mejorar el CTR: 1) Probá video vs imagen estática (video sube 2-3x el CTR). 2) Usá caras humanas reales en las imágenes. 3) El hook en los primeros 3 segundos es todo. 4) CTA claro y específico ("Comprá ahora" > "Más información"). 5) Probá distintos formatos — Story, Reel, Feed.'
+      : `Estás bien posicionado. Rotá creatividades cada 2-3 semanas para mantenerlo.`;
+    return `CTR promedio: ${analysis.avgCTR.toFixed(2)}% — ${ctrStatus}. Benchmark de Meta Ads: 0.9-1.5%. ${actionText}`;
   }
 
-  // CPC
-  if (q.includes('cpc') || q.includes('costo por clic')) {
-    return `Tu CPC promedio es $${analysis.avgCPC.toFixed(2)}. ${analysis.avgCPC > 5 ? 'Es bastante alto. Para reducirlo: mejorá el CTR (mejor CTR = menor CPC), amplía las audiencias, y revisá la puja (probá "Costo por resultado más bajo" en lugar de puja manual).' : analysis.avgCPC < 1 ? 'Excelente! Estás en zona muy eficiente. Aprovechá para aumentar el volumen de gasto.' : 'Está en rango aceptable. Podés optimizarlo mejorando el relevance score de los anuncios.'}`;
+  // ── CPC ───────────────────────────────────────────────────────────────────
+  if (q.includes('cpc') || q.includes('costo por clic') || q.includes('precio clic')) {
+    if (analysis.avgCPC === 0) return `No hay datos de CPC disponibles todavía. Necesitás tener campañas activas con clics registrados.`;
+    const cpcStatus = analysis.avgCPC < 1 ? '¡Muy eficiente! Aprovechá para aumentar el volumen.' : analysis.avgCPC < 3 ? 'En rango aceptable.' : analysis.avgCPC < 6 ? 'Algo elevado — hay margen de mejora.' : 'Alto. Hay que optimizarlo urgente.';
+    return `CPC promedio: $${analysis.avgCPC.toFixed(2)} — ${cpcStatus} El CPC depende principalmente del CTR: un CTR más alto = CPC más bajo (el algoritmo premia los anuncios relevantes). También influyen el tamaño de audiencia y la competencia en la subasta. ${analysis.avgCPC > 3 ? 'Para reducirlo: mejorá el CTR, ampliá las audiencias y probá la puja "Costo más bajo".' : ''}`;
   }
 
-  // Audiencia
-  if (
-    q.includes('audiencia') ||
-    q.includes('público') ||
-    q.includes('targeting') ||
-    q.includes('segmentación')
-  ) {
-    const highFreqCampaigns = campaigns.filter(
+  // ── ROAS / retorno / ROI ───────────────────────────────────────────────────
+  if (q.includes('roas') || q.includes('retorno') || q.includes('roi') || q.includes('rentabilidad') || q.includes('ganancia')) {
+    if (analysis.avgROAS === null) {
+      return `No hay datos de ROAS todavía. Esto pasa porque: 1) Las campañas tienen objetivo de tráfico/alcance (no conversiones). 2) El evento Purchase no está configurado en el píxel. 3) No hubo compras en el período. Para ver ROAS real, configurá el evento de conversión en el píxel de Meta.`;
+    }
+    const roasLabel = analysis.avgROAS >= 4 ? 'excelente' : analysis.avgROAS >= 2 ? 'rentable' : analysis.avgROAS >= 1 ? 'en equilibrio' : 'negativo';
+    return `ROAS promedio: ${analysis.avgROAS.toFixed(1)}x — ${roasLabel}. ${analysis.avgROAS >= 3 ? `"${analysis.topCampaign}" es tu mejor campaña — escalá su presupuesto 20% por día.` : analysis.avgROAS >= 1 ? 'Para mejorar el ROAS: optimizá la landing page (velocidad + CTA), agrega prueba social (testimonios, reseñas) y probá retargeting de carrito abandonado.' : 'Pausá las campañas con ROAS < 1 inmediatamente. Revisá la propuesta de valor, el precio y la audiencia antes de reinvertir.'}`;
+  }
+
+  // ── Frecuencia / saturación ────────────────────────────────────────────────
+  if (q.includes('frecuencia') || q.includes('saturacion') || q.includes('ad fatigue') || q.includes('fatiga')) {
+    const highFreqCamps = campaigns.filter(
       (c) => c.insights && parseFloat(c.insights.frequency || '0') > 3
     );
-    if (highFreqCampaigns.length > 0) {
-      return `${highFreqCampaigns.length} campaña(s) tienen frecuencia alta, lo que indica saturación de audiencia. Recomiendo: 1) Ampliar los criterios de segmentación. 2) Crear Lookalike Audiences basadas en tus compradores actuales. 3) Probar audiencias de intereses diferentes. 4) Usar Advantage+ Audience de Meta para mayor alcance.`;
+    if (highFreqCamps.length > 0) {
+      const worst = highFreqCamps.sort(
+        (a, b) => parseFloat(b.insights!.frequency || '0') - parseFloat(a.insights!.frequency || '0')
+      )[0];
+      return `Frecuencia promedio: ${analysis.avgFrequency.toFixed(1)}x. "${worst.name}" tiene ${parseFloat(worst.insights!.frequency || '0').toFixed(1)}x — audiencia saturada. Esto aumenta el CPM y baja el CTR. Soluciones: 1) Creá 3-5 variaciones del anuncio (mismo mensaje, distinto formato). 2) Ampliá la audiencia objetivo. 3) Activá Advantage+ Audience de Meta. 4) Si supera 5x, pausá y descansá la audiencia 2 semanas.`;
     }
-    return `Tus audiencias parecen saludables (frecuencia promedio ${analysis.avgFrequency.toFixed(1)}x). Para optimizar: probá Lookalike Audiences del 1-3% para mayor precisión y 3-5% para mayor volumen. También activá retargeting de visitantes de sitio.`;
+    return `Frecuencia promedio: ${analysis.avgFrequency.toFixed(1)}x — dentro del rango saludable (< 3x). Para mantenerla bajo control: rotá creatividades cada 2-3 semanas y usá exclusiones de audiencias para no impactar siempre a las mismas personas.`;
   }
 
-  // Creatividades
+  // ── Pixel / tracking ──────────────────────────────────────────────────────
+  if (q.includes('pixel') || q.includes('tracking') || q.includes('evento') || q.includes('capi')) {
+    return `Para un tracking perfecto en 2025: 1) Instala el píxel de Meta en el <head> de todas las páginas. 2) Configurá los eventos estándar: PageView, ViewContent, AddToCart, InitiateCheckout, Purchase. 3) Implementá la Conversions API (CAPI) para capturar eventos server-side (resuelve el 30-40% de conversiones perdidas por bloqueadores). 4) Usá "Meta Pixel Helper" en Chrome para verificar que todo dispara. 5) Activá el matching avanzado (email, teléfono) para mejorar la atribución.`;
+  }
+
+  // ── Audiencia / público / targeting ───────────────────────────────────────
+  if (
+    q.includes('audiencia') ||
+    q.includes('publico') ||
+    q.includes('targeting') ||
+    q.includes('segmentacion') ||
+    q.includes('lookalike') ||
+    q.includes('intereses')
+  ) {
+    const highFreqCamps = campaigns.filter(
+      (c) => c.insights && parseFloat(c.insights.frequency || '0') > 3
+    );
+    if (highFreqCamps.length > 0) {
+      return `${highFreqCamps.length} campaña(s) con frecuencia alta — audiencias saturadas. Para expandirlas: 1) Creá Lookalike Audiences 2-3% basadas en compradores existentes. 2) Probá Advantage+ Audience para que el algoritmo encuentre nuevos compradores. 3) Ampliá el rango de edad/geografía. 4) Excluí a los que ya compraron para no desperdiciar impresiones.`;
+    }
+    return `Audiencias en estado saludable (frecuencia ${analysis.avgFrequency.toFixed(1)}x). Estrategia recomendada: tráfico frío con Lookalike 1-3% (mayor precisión) + retargeting con Lookalike 3-5% (mayor volumen) + retargeting de visitantes del sitio (mayor intención). Mantené siempre una campaña de retargeting activa — suele tener 3-5x mejor ROAS.`;
+  }
+
+  // ── Creatividades / anuncio / imagen / video ───────────────────────────────
   if (
     q.includes('creativo') ||
     q.includes('creative') ||
     q.includes('anuncio') ||
     q.includes('imagen') ||
-    q.includes('video')
+    q.includes('video') ||
+    q.includes('copy') ||
+    q.includes('texto')
   ) {
-    return `Para creatividades de alto rendimiento en Meta Ads: 1) Video genera 3x más engagement que imagen estática. 2) Los primeros 3 segundos son cruciales — empezá con el "hook". 3) Subtitulos en video (85% lo ve sin sonido). 4) Formato 9:16 para feed y stories. 5) Rotá creatividades cada 2-3 semanas. Tu CTR actual (${analysis.avgCTR.toFixed(2)}%) ${analysis.avgCTR < 1.5 ? 'sugiere que hay margen de mejora en el creativo' : 'indica que los creativos están funcionando bien'}.`;
+    return `Creatividades de alto rendimiento en Meta Ads: 1) Video short-form (9:16) supera a imagen en CTR 2-3x. 2) Los primeros 3 segundos determinan si continúan o no — usá un "hook" disruptivo. 3) Mostrá caras humanas reales (generan más conexión que productos solos). 4) Subtítulos en video (85% ve sin sonido). 5) CTA claro con urgencia o beneficio específico. 6) Rotá mínimo 3 variantes por campaña. Tu CTR actual (${analysis.avgCTR.toFixed(2)}%) ${analysis.avgCTR < 1.5 ? 'tiene margen de mejora con nuevos creativos' : 'indica que los creativos están funcionando — mantené el ritmo'}.`;
   }
 
-  // Presupuesto
-  if (q.includes('presupuesto') || q.includes('budget') || q.includes('gasto')) {
-    return `Gastaste $${analysis.totalSpend.toFixed(0)} en total. ${analysis.avgROAS !== null ? `Con ROAS ${analysis.avgROAS.toFixed(1)}x, cada $1 invertido genera $${analysis.avgROAS.toFixed(2)}. ` : ''}Para distribución de presupuesto: asigná el 70% a campañas probadas y rentables, 20% a testeo de nuevas audiencias/creatividades, y 10% a retargeting.`;
+  // ── Presupuesto / gasto / budget ───────────────────────────────────────────
+  if (q.includes('presupuesto') || q.includes('budget') || q.includes('gasto') || q.includes('cuanto gastar') || q.includes('inversion')) {
+    const roasText = analysis.avgROAS !== null
+      ? `Con ROAS ${analysis.avgROAS.toFixed(1)}x, cada $100 invertidos generan $${(analysis.avgROAS * 100).toFixed(0)} en ventas. `
+      : '';
+    return `Gastaste $${analysis.totalSpend.toFixed(0)} en total. ${roasText}Distribución ideal del presupuesto: 70% a campañas probadas ("${analysis.topCampaign}" es la mejor), 20% a testeo de nuevas audiencias/creatividades, 10% a retargeting. No aumentes más del 20% diario por campaña o el algoritmo se resetea y pierde optimización.`;
   }
 
-  // ROAS
-  if (q.includes('roas') || q.includes('retorno') || q.includes('roi')) {
-    if (analysis.avgROAS === null) {
-      return `No hay datos de ROAS disponibles. Esto puede ser porque: 1) Las campañas no tienen objetivo de ventas/conversiones. 2) El píxel no está midiendo compras. 3) Los eventos de conversión no están configurados. Configurá el evento Purchase en el píxel para ver el ROAS real.`;
-    }
-    return `Tu ROAS promedio es ${analysis.avgROAS.toFixed(1)}x. ${analysis.avgROAS >= 3 ? `¡Excelente! Tenés campañas muy rentables. "${analysis.topCampaign}" es tu mejor candidata para escalar.` : analysis.avgROAS >= 1 ? `Estás en positivo pero hay margen de mejora. Optimizá las landing pages y el proceso de compra para mejorar la conversión.` : `Estás perdiendo dinero. Pausá las campañas con ROAS < 1 inmediatamente y revisá la propuesta de valor.`}`;
+  // ── Campaña específica ─────────────────────────────────────────────────────
+  if (q.includes('campana') || q.includes('campañas') || q.includes('mejor campana') || q.includes('cual campana')) {
+    if (campaigns.length === 0) return `No hay campañas disponibles todavía.`;
+    return `Tenés ${analysis.totalCampaigns} campañas totales (${analysis.activeCampaigns} activas). La mejor es "${analysis.topCampaign}" — enfocá recursos en ella. La que necesita más atención es "${analysis.worstCampaign}". Para ver el detalle de cada campaña, revisá la sección Campañas en el menú.`;
   }
 
-  // Default
-  return `Basándome en tu portfolio: salud ${analysis.healthScore}/100 (${analysis.healthLabel}), gasto total $${analysis.totalSpend.toFixed(0)}, CTR promedio ${analysis.avgCTR.toFixed(2)}%${analysis.avgROAS !== null ? `, ROAS ${analysis.avgROAS.toFixed(1)}x` : ''}. ${analysis.alerts.filter((a) => a.priority === 'critical' || a.priority === 'high').length} alertas prioritarias requieren atención. ¿Querés que profundice en algún tema específico? Podés preguntarme sobre CTR, ROAS, audiencias, creatividades, presupuesto o conversiones.`;
+  // ── Default inteligente ────────────────────────────────────────────────────
+  const criticalCount = analysis.alerts.filter(
+    (a) => a.priority === 'critical' || a.priority === 'high'
+  ).length;
+  return `Portfolio actual: score ${analysis.healthScore}/100 (${analysis.healthLabel}) | Gasto: $${analysis.totalSpend.toFixed(0)} | CTR: ${analysis.avgCTR.toFixed(2)}%${analysis.avgROAS !== null ? ` | ROAS: ${analysis.avgROAS.toFixed(1)}x` : ''} | Conversiones: ${analysis.totalConversions}${criticalCount > 0 ? ` | ⚠️ ${criticalCount} alertas prioritarias` : ''}. Podés preguntarme sobre: escalar campañas, conversiones, CTR, ROAS, presupuesto, frecuencia, audiencias, creatividades o qué métrica mejorar primero.`;
 }
