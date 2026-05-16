@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import type {
   AdAccount,
   Campaign,
@@ -13,19 +14,32 @@ import type {
 
 const BASE_URL = 'https://graph.facebook.com';
 
-function getConfig() {
-  const token = process.env.META_ACCESS_TOKEN;
-  const accountId = process.env.META_AD_ACCOUNT_ID;
-  const version = process.env.META_API_VERSION || 'v21.0';
+async function getConfig() {
+  let cookieToken: string | undefined;
+  let cookieAccountId: string | undefined;
+  let cookieVersion: string | undefined;
 
-  if (!token) throw new Error('META_ACCESS_TOKEN no está configurado en las variables de entorno.');
-  if (!accountId) throw new Error('META_AD_ACCOUNT_ID no está configurado en las variables de entorno.');
+  try {
+    const cookieStore = await cookies();
+    cookieToken = cookieStore.get('meta_token')?.value;
+    cookieAccountId = cookieStore.get('meta_account_id')?.value;
+    cookieVersion = cookieStore.get('meta_api_version')?.value;
+  } catch {
+    // cookies() may throw outside a request context
+  }
+
+  const token = process.env.META_ACCESS_TOKEN || cookieToken;
+  const accountId = process.env.META_AD_ACCOUNT_ID || cookieAccountId;
+  const version = process.env.META_API_VERSION || cookieVersion || 'v21.0';
+
+  if (!token) throw new Error('Token no configurado. Ingresá tu Access Token en Configuración.');
+  if (!accountId) throw new Error('Ad Account ID no configurado. Ingresalo en Configuración.');
 
   return { token, accountId, version };
 }
 
 async function metaFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
-  const { token, version } = getConfig();
+  const { token, version } = await getConfig();
   const url = new URL(`${BASE_URL}/${version}${path}`);
   url.searchParams.set('access_token', token);
   for (const [k, v] of Object.entries(params)) {
@@ -48,7 +62,7 @@ async function metaFetch<T>(path: string, params: Record<string, string> = {}): 
 
 export async function testConnection(): Promise<ConnectionTestResult> {
   try {
-    const { accountId } = getConfig();
+    const { accountId } = await getConfig();
     const account = await metaFetch<AdAccount>(`/${accountId}`, {
       fields: 'id,name,account_status,currency,timezone_name',
     });
@@ -94,7 +108,7 @@ export async function getCampaigns(
   statuses: CampaignStatus[] = ['ACTIVE', 'PAUSED'],
   dateRange?: DateRange
 ): Promise<Campaign[]> {
-  const { accountId } = getConfig();
+  const { accountId } = await getConfig();
   const params: Record<string, string> = {
     fields: 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,updated_time,created_time',
     limit: '100',
@@ -189,7 +203,7 @@ export async function getAdInsights(
 }
 
 export async function getAccountInsights(dateRange: DateRange): Promise<InsightsData | null> {
-  const { accountId } = getConfig();
+  const { accountId } = await getConfig();
   const data = await metaFetch<PaginatedResponse<InsightsData>>(`/${accountId}/insights`, {
     fields: INSIGHTS_FIELDS,
     time_range: JSON.stringify(dateRange),
