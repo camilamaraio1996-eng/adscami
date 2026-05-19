@@ -24,5 +24,7 @@ export async function GET() {
     ? 'env'
     : 'none';
 
-  return NextResponse.json({ hasToken, accountId, apiVersion, source });
+  const hasClaudeKey = !!cookieStore.get('claude_api_key')?.value || !!process.env.ANTHROPIC_API_KEY;
+
+  return NextResponse.json({ hasToken, accountId, apiVersion, source, hasClaudeKey });
 }

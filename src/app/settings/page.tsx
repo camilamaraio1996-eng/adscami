@@ -12,6 +12,7 @@ import {
   Link2,
   Trash2,
   ExternalLink,
+  Brain,
 } from 'lucide-react';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ interface ConfigStatus {
   accountId: string;
   apiVersion: string;
   source: 'env' | 'cookie' | 'none';
+  hasClaudeKey?: boolean;
 }
 
 interface ConnectionResult {
@@ -41,6 +43,10 @@ export default function SettingsPage() {
   const [result, setResult] = useState<ConnectionResult | null>(null);
   const [configStatus, setConfigStatus] = useState<ConfigStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [claudeKey, setClaudeKey] = useState('');
+  const [showClaudeKey, setShowClaudeKey] = useState(false);
+  const [savingClaude, setSavingClaude] = useState(false);
+  const [hasClaudeKey, setHasClaudeKey] = useState(false);
 
   useEffect(() => {
     loadConfigStatus();
@@ -54,10 +60,26 @@ export default function SettingsPage() {
       setConfigStatus(data);
       if (data.accountId) setAccountId(data.accountId);
       if (data.apiVersion) setApiVersion(data.apiVersion);
+      if (data.hasClaudeKey) setHasClaudeKey(data.hasClaudeKey);
     } catch {
       // ignore
     } finally {
       setLoadingStatus(false);
+    }
+  }
+
+  async function saveClaudeKey() {
+    setSavingClaude(true);
+    try {
+      await fetch('/api/meta/save-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claudeKey }),
+      });
+      setClaudeKey('');
+      await loadConfigStatus();
+    } finally {
+      setSavingClaude(false);
     }
   }
 
@@ -314,6 +336,59 @@ export default function SettingsPage() {
                 duración (60 días) o un System User Token.
               </p>
             </div>
+          </div>
+
+          {/* Claude API */}
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-violet-400" />
+              <p className="text-sm font-medium text-white">AI Chat con Claude</p>
+              <span className="text-[9px] bg-violet-500/20 text-violet-400 px-1.5 py-0.5 rounded-full font-bold">OPCIONAL</span>
+            </div>
+            <p className="text-xs text-white/40">
+              Conectá tu Claude API key para que el chat de Intelligence use IA real (Anthropic Claude Sonnet) en vez del sistema de reglas básico. Las respuestas serán mucho más inteligentes y contextuales.
+            </p>
+
+            {hasClaudeKey && (
+              <div className="flex items-center gap-2 text-xs text-violet-400">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Claude API key configurada — el chat usa IA real</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-white/60">
+                Claude API Key
+                {hasClaudeKey && !claudeKey && (
+                  <span className="ml-2 text-violet-400/60">(configurada — pegá una nueva para reemplazarla)</span>
+                )}
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showClaudeKey ? 'text' : 'password'}
+                  value={claudeKey}
+                  onChange={(e) => setClaudeKey(e.target.value)}
+                  placeholder={hasClaudeKey ? '••••••••••••••••••••' : 'sk-ant-...'}
+                  className="pr-10 font-mono text-xs h-9 bg-white/[0.03] border-white/[0.08] text-white placeholder:text-white/20"
+                />
+                <button type="button" onClick={() => setShowClaudeKey(!showClaudeKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                  {showClaudeKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-white/30">
+                Generá una en{' '}
+                <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer"
+                  className="text-violet-400 hover:text-violet-300 inline-flex items-center gap-0.5">
+                  console.anthropic.com <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </p>
+            </div>
+
+            <Button onClick={saveClaudeKey} disabled={!claudeKey || savingClaude}
+              className="w-full h-9 text-xs bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40">
+              {savingClaude ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Guardando...</> : 'Guardar Claude API Key'}
+            </Button>
           </div>
 
           {/* How to get long-lived token */}

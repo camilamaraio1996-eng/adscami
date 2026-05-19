@@ -84,6 +84,16 @@ export default function IntelligencePage() {
     [bestCampaignInsights]
   );
 
+  const [hasClaudeKey, setHasClaudeKey] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/meta/get-config')
+      .then((r) => r.json())
+      .then((d) => setHasClaudeKey(!!d.hasClaudeKey))
+      .catch(() => {});
+  }, []);
+
   // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -99,36 +109,73 @@ export default function IntelligencePage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const sendMessage = (question: string) => {
-    if (!question.trim()) return;
+  useEffect(() => {
+    if (hasClaudeKey) {
+      setMessages([
+        {
+          role: 'assistant',
+          content:
+            '¡Hola! Soy tu analista AI powered by Claude. Puedo analizar tus datos en profundidad y darte recomendaciones precisas. ¿En qué puedo ayudarte?',
+        },
+      ]);
+    }
+  }, [hasClaudeKey]);
+
+  const sendMessage = async (question: string) => {
+    if (!question.trim() || chatLoading) return;
     const userMsg: ChatMessage = { role: 'user', content: question };
-    const response = generateChatResponse(
-      question,
-      analysis ?? {
-        totalSpend: 0,
-        totalImpressions: 0,
-        totalClicks: 0,
-        totalConversions: 0,
-        avgCTR: 0,
-        avgCPC: 0,
-        avgCPM: 0,
-        avgROAS: null,
-        avgFrequency: 0,
-        healthScore: 50,
-        healthLabel: 'Sin datos',
-        alerts: [],
-        insights: [],
-        topCampaign: 'N/A',
-        worstCampaign: 'N/A',
-        totalCampaigns: 0,
-        activeCampaigns: 0,
-        riskLevel: 'low',
-      },
-      campaigns
-    );
-    const assistantMsg: ChatMessage = { role: 'assistant', content: response };
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setChatLoading(true);
+
+    try {
+      if (hasClaudeKey) {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: question,
+            portfolioContext: analysis ?? {},
+            campaigns: campaigns.slice(0, 10),
+          }),
+        });
+        const data = await res.json();
+        const assistantMsg: ChatMessage = {
+          role: 'assistant',
+          content: data.response || data.error || 'Error al consultar Claude.',
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      } else {
+        const response = generateChatResponse(
+          question,
+          analysis ?? {
+            totalSpend: 0,
+            totalImpressions: 0,
+            totalClicks: 0,
+            totalConversions: 0,
+            avgCTR: 0,
+            avgCPC: 0,
+            avgCPM: 0,
+            avgROAS: null,
+            avgFrequency: 0,
+            healthScore: 50,
+            healthLabel: 'Sin datos',
+            alerts: [],
+            insights: [],
+            topCampaign: 'N/A',
+            worstCampaign: 'N/A',
+            totalCampaigns: 0,
+            activeCampaigns: 0,
+            riskLevel: 'low',
+          },
+          campaigns
+        );
+        const assistantMsg: ChatMessage = { role: 'assistant', content: response };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   return (
@@ -323,6 +370,11 @@ export default function IntelligencePage() {
             <span className="text-[10px] bg-violet-500/20 text-violet-400 px-2 py-0.5 rounded-full">
               Análisis en tiempo real
             </span>
+            {hasClaudeKey && (
+              <span className="text-[10px] bg-violet-500/20 text-violet-400 px-2 py-0.5 rounded-full ml-1">
+                ✦ Claude AI
+              </span>
+            )}
           </div>
 
           <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] overflow-hidden">
@@ -333,7 +385,8 @@ export default function IntelligencePage() {
                 <button
                   key={q}
                   onClick={() => sendMessage(q)}
-                  className="text-[10px] px-2.5 py-1 rounded-full bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors border border-violet-500/20"
+                  disabled={chatLoading}
+                  className="text-[10px] px-2.5 py-1 rounded-full bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-colors border border-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {q}
                 </button>
@@ -355,6 +408,15 @@ export default function IntelligencePage() {
                   {msg.content}
                 </div>
               ))}
+              {chatLoading && (
+                <div className="bg-white/[0.04] text-white/80 border border-white/[0.06] max-w-[85%] rounded-xl px-3.5 py-2.5">
+                  <div className="flex gap-1 items-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
               <div ref={chatEndRef} />
             </div>
 
@@ -375,7 +437,7 @@ export default function IntelligencePage() {
               />
               <button
                 onClick={() => sendMessage(input)}
-                disabled={!input.trim()}
+                disabled={!input.trim() || chatLoading}
                 className="w-9 h-9 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors shrink-0"
               >
                 <Send className="w-3.5 h-3.5 text-white" />

@@ -212,3 +212,17 @@ export async function getAccountInsights(dateRange: DateRange): Promise<Insights
   });
   return data.data[0] || null;
 }
+
+export async function getAccountLevelInsights(
+  dateRange: DateRange,
+  level: 'adset' | 'ad'
+): Promise<InsightsData[]> {
+  const { accountId } = await getConfig();
+  const data = await metaFetch<PaginatedResponse<InsightsData>>(`/${accountId}/insights`, {
+    fields: INSIGHTS_FIELDS,
+    time_range: JSON.stringify(dateRange),
+    level,
+    limit: '500',
+  });
+  return data.data;
+}

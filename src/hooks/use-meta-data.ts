@@ -88,6 +88,32 @@ export function useCampaignDetail(
   return { ...data, loading, error, refetch: fetch };
 }
 
+export function useComparatorItems(level: 'adset' | 'ad', preset = 'last_30d') {
+  const [items, setItems] = useState<InsightsData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { since, until } = getDateRangeParams(preset);
+      const res = await window.fetch(`/api/meta/compare?level=${level}&since=${since}&until=${until}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al cargar datos');
+      setItems(data.data || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error desconocido');
+    } finally {
+      setLoading(false);
+    }
+  }, [level, preset]);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  return { items, loading, error, refetch: fetchItems };
+}
+
 export function useAccountInsights(preset = 'last_30d', customSince?: string, customUntil?: string) {
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(false);
