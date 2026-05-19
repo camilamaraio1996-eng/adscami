@@ -28,9 +28,9 @@ async function getConfig() {
     // cookies() may throw outside a request context
   }
 
-  const token = process.env.META_ACCESS_TOKEN || cookieToken;
-  const accountId = process.env.META_AD_ACCOUNT_ID || cookieAccountId;
-  const version = process.env.META_API_VERSION || cookieVersion || 'v21.0';
+  const token = cookieToken || process.env.META_ACCESS_TOKEN;
+  const accountId = cookieAccountId || process.env.META_AD_ACCOUNT_ID;
+  const version = cookieVersion || process.env.META_API_VERSION || 'v21.0';
 
   if (!token) throw new Error('Token no configurado. Ingresá tu Access Token en Configuración.');
   if (!accountId) throw new Error('Ad Account ID no configurado. Ingresalo en Configuración.');

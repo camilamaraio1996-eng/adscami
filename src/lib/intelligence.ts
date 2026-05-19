@@ -828,15 +828,21 @@ export function generateChatResponse(
     return `No hay datos de conversiones disponibles. Configurá el evento de conversión (Purchase o Lead) en el Administrador de eventos de Meta para que el píxel lo registre correctamente.`;
   }
 
-  // ── Problema / mal / peor ──────────────────────────────────────────────────
+  // ── Problema / qué arreglar / qué falla ───────────────────────────────────
   if (
     q.includes('problema') ||
     q.includes('issue') ||
     q.includes('mal') ||
     q.includes('peor') ||
-    q.includes('mayor problema') ||
-    q.includes('que falla') ||
-    q.includes('que fallo')
+    q.includes('falla') ||
+    q.includes('fallo') ||
+    q.includes('arreglar') ||
+    q.includes('arreglo') ||
+    q.includes('solucionar') ||
+    q.includes('solucion') ||
+    q.includes('urgente') ||
+    q.includes('critico') ||
+    q.includes('alerta')
   ) {
     const criticals = analysis.alerts.filter((a) => a.priority === 'critical');
     const highs = analysis.alerts.filter((a) => a.priority === 'high');
@@ -851,16 +857,28 @@ export function generateChatResponse(
     return `No hay problemas críticos en este momento (score ${analysis.healthScore}/100 — ${analysis.healthLabel}). La principal área de mejora es: ${analysis.avgCTR < 1 ? `CTR bajo (${analysis.avgCTR.toFixed(2)}% — benchmark 1%)` : analysis.avgFrequency > 3 ? `frecuencia alta (${analysis.avgFrequency.toFixed(1)}x — máximo recomendado 3x)` : analysis.avgROAS !== null && analysis.avgROAS < 2 ? `ROAS (${analysis.avgROAS.toFixed(1)}x — objetivo 2x+)` : 'el portfolio está bien, mantené el ritmo actual'}.`;
   }
 
-  // ── Qué métrica mejorar primero ────────────────────────────────────────────
+  // ── Qué hacer / qué mejorar / consejos / optimizar ────────────────────────
   if (
     q.includes('metrica') ||
-    q.includes('mejorar primero') ||
-    q.includes('que mejorar') ||
+    q.includes('mejorar') ||
     q.includes('por donde empezar') ||
     q.includes('prioridad') ||
     q.includes('primero') ||
     q.includes('foco') ||
-    q.includes('enfoque')
+    q.includes('enfoque') ||
+    q.includes('que hacer') ||
+    q.includes('que debo') ||
+    q.includes('que tengo') ||
+    q.includes('que necesito') ||
+    q.includes('como optimizar') ||
+    q.includes('optimizar') ||
+    q.includes('optimizacion') ||
+    q.includes('consejo') ||
+    q.includes('recomenda') ||
+    q.includes('ayuda') ||
+    q.includes('empezar') ||
+    q.includes('inicio') ||
+    q.includes('estrategia')
   ) {
     // Priority logic: determine the most impactful metric to fix
     const criticalAlerts = analysis.alerts.filter((a) => a.priority === 'critical');
