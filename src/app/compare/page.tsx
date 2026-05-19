@@ -174,9 +174,10 @@ function CampaignsTab({ preset }: { preset: string }) {
           <p className="text-xs text-white/30">No hay datos disponibles</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {campaigns.map((c, i) => {
+            {campaigns.map((c) => {
               const idx = selectedIds.indexOf(c.id);
               const isSel = idx !== -1;
+              const isActive = c.status === 'ACTIVE';
               return (
                 <button
                   key={c.id}
@@ -189,6 +190,9 @@ function CampaignsTab({ preset }: { preset: string }) {
                   )}
                 >
                   {isSel && <span className="font-bold">{idx + 1}.</span>}
+                  {isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  )}
                   <span className="truncate max-w-[180px]">{c.name}</span>
                   {isSel && <X className="w-3 h-3 shrink-0" />}
                 </button>
@@ -267,9 +271,10 @@ function InsightsTab({
           <p className="text-xs text-white/30">No hay datos disponibles</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {entities.map((e, i) => {
+            {entities.map((e) => {
               const idx = selectedIds.indexOf(e.id);
               const isSel = idx !== -1;
+              const isActive = e.ins.effective_status === 'ACTIVE';
               return (
                 <button
                   key={e.id}
@@ -281,7 +286,10 @@ function InsightsTab({
                       : 'text-white/40 border-white/[0.06] hover:border-white/20 hover:text-white/70'
                   )}
                 >
-                  {isSel && <span className="font-bold shrink-0">{idx + 1}.</span>}
+                  {isSel && <span className="font-bold shrink-0 mt-1">{idx + 1}.</span>}
+                  {isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+                  )}
                   <div className="min-w-0">
                     <div className="truncate max-w-[200px]">{e.name}</div>
                     <div className="text-[10px] opacity-60 truncate max-w-[200px]">{e.parentName}</div>

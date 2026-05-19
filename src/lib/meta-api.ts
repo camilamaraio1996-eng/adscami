@@ -218,11 +218,26 @@ export async function getAccountLevelInsights(
   level: 'adset' | 'ad'
 ): Promise<InsightsData[]> {
   const { accountId } = await getConfig();
-  const data = await metaFetch<PaginatedResponse<InsightsData>>(`/${accountId}/insights`, {
-    fields: INSIGHTS_FIELDS,
-    time_range: JSON.stringify(dateRange),
-    level,
-    limit: '500',
+  const [insightsRes, statusRes] = await Promise.all([
+    metaFetch<PaginatedResponse<InsightsData>>(`/${accountId}/insights`, {
+      fields: INSIGHTS_FIELDS,
+      time_range: JSON.stringify(dateRange),
+      level,
+      limit: '500',
+    }),
+    metaFetch<PaginatedResponse<{ id: string; effective_status: string }>>(
+      `/${accountId}/${level === 'adset' ? 'adsets' : 'ads'}`,
+      { fields: 'id,effective_status', limit: '500' }
+    ).catch(() => ({ data: [] as { id: string; effective_status: string }[] })),
+  ]);
+
+  const statusMap: Record<string, string> = {};
+  for (const e of statusRes.data) statusMap[e.id] = e.effective_status;
+
+  return insightsRes.data.map((ins) => {
+    const entityId = level === 'adset' ? ins.adset_id : ins.ad_id;
+    return entityId && statusMap[entityId]
+      ? { ...ins, effective_status: statusMap[entityId] }
+      : ins;
   });
-  return data.data;
 }

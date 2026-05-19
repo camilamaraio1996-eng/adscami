@@ -93,6 +93,7 @@ export interface InsightsData {
   adset_name?: string;
   ad_id?: string;
   ad_name?: string;
+  effective_status?: string;
   spend: string;
   impressions: string;
   reach: string;
